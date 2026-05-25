@@ -1,5 +1,5 @@
 -- ============================================================
--- CMS Medicare Part B Claims — Cross-Country Fraud Detection
+-- CMS Medicare Part B Claims  Cross-Country Fraud Detection
 --
 -- Schema mirrors the CMS Medicare Physician & Other Practitioners
 -- by Provider and Service PUF available at:
