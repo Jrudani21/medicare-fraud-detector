@@ -1,9 +1,7 @@
-# 🏥 Catching Phantom Billers: Medicare Cross-Country Fraud Detection
+# 🏥 Medicare Cross-Country Provider Fraud Detector
 
-> **Can SQL alone identify providers submitting Medicare claims from two countries at the same time?**  
-> Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims — with a live Streamlit dashboard.
-
-![Dashboard](figures/dashboard_preview.png)
+> **Can SQL alone identify providers billing Medicare from two countries at the same time?**  
+> Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims — surfaced in a live Streamlit dashboard.
 
 ---
 
@@ -20,14 +18,14 @@
 
 ## Problem
 
-Medicare fraud costs the US government an estimated **$60 billion per year**. One documented scheme — investigated by the CMS Office of Inspector General (OIG) — involves providers billing from a US address and a foreign country during overlapping date windows. A provider cannot physically be in two countries at the same time.
+Medicare fraud costs the US government an estimated **$60 billion per year**. One documented scheme — investigated by the CMS Office of Inspector General (OIG) — involves providers submitting claims from a US address and a foreign country during **overlapping date windows**. A provider cannot physically be in two countries at the same time, making this a strong indicator of phantom billing.
 
-This project detects that pattern by:
+This project detects that pattern end-to-end:
 
-1. Identifying NPIs with overlapping US and foreign claim windows (phantom billing signal)
-2. Scoring every flagged provider by severity — pairs, overlap days, charge ratio, payment volume
-3. Benchmarking foreign charges against US specialty averages for the same procedure codes
-4. Surfacing findings in an interactive 5-tab Streamlit dashboard
+1. Flag every NPI with overlapping US and foreign billing windows (SQL self-join)
+2. Score each flagged provider on severity — overlap pairs, overlap days, charge inflation, payment volume
+3. Benchmark foreign charges against the US average for the same HCPCS code and specialty
+4. Surface all findings in an interactive 5-tab Streamlit dashboard with Plotly charts
 
 ---
 
@@ -35,25 +33,25 @@ This project detects that pattern by:
 
 | Property | Detail |
 |---|---|
-| **Source** | CMS Medicare Physician & Other Practitioners by Provider and Service (PUF) |
-| **Real data URL** | [data.cms.gov](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service) |
-| **Included dataset** | Synthetic — 9,976 claims, 2,000 NPIs (`data/claims.csv`) |
+| **Source** | [CMS Medicare Physician & Other Practitioners by Provider and Service (PUF)](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service) |
+| **Included dataset** | Synthetic — 9,976 claims · 2,000 NPIs (`data/claims.csv`) |
 | **Generator** | `data/generate.py` — real HCPCS codes, NPI format, CMS-benchmarked payment amounts |
 | **Storage** | SQLite (`data/claims.db`) |
+| **Drop-in compatible** | Schema mirrors exact CMS PUF column names — swap the real CSV and all queries run unchanged |
 
-### Key Variables
+### Schema (`queries/01_schema.sql`)
 
 | Column | Type | Description |
 |---|---|---|
-| `rndrng_npi` | text | National Provider Identifier |
-| `rndrng_prvdr_cntry` | text | Country of provider address |
-| `rndrng_prvdr_state_abrvtn` | text | US state (when domestic) |
-| `hcpcs_cd` | text | Procedure code billed |
-| `avg_mdcr_pymt_amt` | numeric | Average Medicare payment ($) |
-| `avg_sbmtd_chrg` | numeric | Average submitted charge ($) |
-| `rndrng_prvdr_type` | text | Provider specialty |
-
-> The schema in `queries/01_schema.sql` mirrors exact CMS PUF column names — swap in the real CSV to run on live data with no code changes.
+| `rndrng_npi` | TEXT | 10-digit National Provider Identifier |
+| `rndrng_prvdr_cntry` | TEXT | Country of provider address (US or ISO code) |
+| `rndrng_prvdr_state_abrvtn` | TEXT | US state (blank for foreign claims) |
+| `rndrng_prvdr_type` | TEXT | Provider specialty |
+| `hcpcs_cd` | TEXT | Procedure code billed |
+| `clm_from_dt` / `clm_thru_dt` | DATE | Claim date window |
+| `avg_sbmtd_chrg` | REAL | Average submitted charge ($) |
+| `avg_mdcr_alowd_amt` | REAL | Average Medicare allowed amount ($) |
+| `avg_mdcr_pymt_amt` | REAL | Average Medicare payment ($) |
 
 ---
 
@@ -63,60 +61,85 @@ This project detects that pattern by:
 
 | File | What It Does |
 |---|---|
-| `01_schema.sql` | Create `cms_claims` table with CMS column names and indexes |
-| `02_overlap_detection.sql` | Self-join to find NPIs with overlapping US + foreign claim date windows |
-| `03_risk_scoring.sql` | Score each flagged provider: overlap pairs, overlap days, charge ratio, payment volume → HIGH / MEDIUM / LOW |
-| `04_country_pair_summary.sql` | Aggregate fraud signals by foreign country |
-| `05_specialty_benchmark.sql` | Compare foreign payments to US average for same HCPCS + specialty |
+| `01_schema.sql` | Create `cms_claims` table with CMS PUF column names and indexes on NPI, country, and dates |
+| `02_overlap_detection.sql` | Self-join on same NPI — one US claim, one foreign claim — with overlapping `clm_from_dt / clm_thru_dt` windows |
+| `03_risk_scoring.sql` | Score every flagged NPI: +3 per pair · +1 per overlap day (cap 15) · +2 if charge ratio > 5× · +2 if payments > $10k · +3 if 3+ countries |
+| `04_country_pair_summary.sql` | Aggregate fraud signals by foreign country — flagged providers, overlap instances, charge inflation, $ at risk |
+| `05_specialty_benchmark.sql` | Compare foreign payments to the US average for the same HCPCS + specialty; flag anything ≥ 2× as INFLATED |
 
-**Core fraud query logic (`02_overlap_detection.sql`)**
+**Core fraud detection logic** (`02_overlap_detection.sql`):
 
 ```sql
--- Self-join: same NPI, one US claim, one foreign claim, overlapping dates
-SELECT a.rndrng_npi, a.rndrng_prvdr_cntry AS us_country,
-       b.rndrng_prvdr_cntry AS foreign_country, ...
-FROM cms_claims a
-JOIN cms_claims b ON a.rndrng_npi = b.rndrng_npi
-WHERE a.rndrng_prvdr_cntry = 'US'
-  AND b.rndrng_prvdr_cntry != 'US'
-  AND a.date_range overlaps b.date_range
+SELECT a.rndrng_npi, a.rndrng_prvdr_last_org_name AS provider_name,
+       b.rndrng_prvdr_cntry AS foreign_country,
+       (MIN(a.clm_thru_dt, b.clm_thru_dt) -
+        MAX(a.clm_from_dt, b.clm_from_dt)) AS overlap_days,
+       ROUND(b.avg_sbmtd_chrg / NULLIF(b.avg_mdcr_alowd_amt, 0), 2) AS foreign_charge_ratio
+FROM cms_claims AS a
+JOIN cms_claims AS b
+    ON  a.rndrng_npi         = b.rndrng_npi   -- same provider
+    AND a.clm_id             < b.clm_id        -- avoid duplicate pairs
+    AND a.rndrng_prvdr_cntry = 'US'            -- one side US
+    AND b.rndrng_prvdr_cntry != 'US'           -- other side foreign
+    AND a.clm_from_dt        <= b.clm_thru_dt  -- date overlap
+    AND b.clm_from_dt        <= a.clm_thru_dt
+ORDER BY overlap_days DESC, foreign_charge_ratio DESC;
+```
+
+**Risk score formula** (`03_risk_scoring.sql`):
+
+```
+Score = (pairs × 3)
+      + MIN(total_overlap_days, 15)
+      + 2  if max_charge_ratio > 5.0
+      + 2  if total_suspicious_payment > $10,000
+      + 3  if distinct_countries ≥ 3
+
+HIGH   ≥ 12  →  OIG referral recommended
+MEDIUM  6–11  →  Enhanced monitoring
+LOW    < 6   →  Flag for review
 ```
 
 ### Streamlit Dashboard (`app.py`)
 
 | Tab | Content |
 |---|---|
-| 🌍 Foreign Country Risk | Bar charts — flagged providers and charge inflation by country |
-| 👤 Flagged Providers | Filterable NPI-level risk table with score and risk level |
-| 📋 Claim Pairs | Overlapping US ↔ foreign claim pairs with per-NPI timeline |
-| 📊 Charge Benchmarks | Foreign payments vs US specialty benchmark — flags inflated claims |
-| 📈 Risk Distribution | Pie + histogram + specialty breakdown |
+| 🌍 **Foreign Country Risk** | Side-by-side bar charts — flagged providers and avg charge inflation ratio by country |
+| 👤 **Flagged Providers** | Filterable NPI-level risk table — risk level, score, $ at risk, overlap days, foreign countries |
+| 📋 **Claim Pairs** | Drill into overlapping US ↔ foreign claim pairs; Plotly timeline per NPI |
+| 📊 **Charge Benchmarks** | INFLATED claims table — foreign payment vs US specialty average for same HCPCS |
+| 📈 **Risk Distribution** | Pie chart by risk level · score histogram · suspicious $ at risk by specialty |
+
+Sidebar filters: **Risk Level** · **Specialty** · **Min Overlap Days**
 
 ---
 
 ## Key Results
 
-### Fraud Detection Summary (Synthetic Data)
+### Detection Summary (Synthetic Data)
 
 | Metric | Result |
 |---|---|
-| **Providers flagged** | 18 out of 2,000 NPIs (0.9%) |
-| **Suspicious Medicare payments** | $46,000+ |
-| **Highest-risk countries** | Mexico, India, Philippines |
-| **Max charge inflation** | 5–6× the allowed Medicare amount |
-| **Benchmark threshold** | Foreign claims ≥ 2× US specialty average flagged |
+| Providers analysed | 2,000 NPIs |
+| **Flagged as suspicious** | **18 NPIs (0.9%)** |
+| HIGH risk (OIG referral level) | 7 NPIs |
+| **Total Medicare $ at risk** | **$46,000+** |
+| Highest charge inflation | 5–6× the Medicare allowed amount |
+| Most inflated foreign countries | Mexico · India · Philippines |
 
-### Risk Score Distribution
+### Risk Score Breakdown
 
-| Risk Level | Criteria |
-|---|---|
-| **HIGH** | Multiple overlap pairs + high payment volume + charge ratio > 3× |
-| **MEDIUM** | At least one overlap pair + moderate charge inflation |
-| **LOW** | Single overlap, low payment, minimal charge difference |
+| Risk Level | Threshold | Action |
+|---|---|---|
+| **HIGH** | Score ≥ 12 | OIG referral recommended |
+| **MEDIUM** | Score 6–11 | Enhanced monitoring |
+| **LOW** | Score < 6 | Flag for review |
 
-### Top Foreign Countries by Charge Inflation
+### Charge Benchmarking
 
-| Country | Avg Charge Ratio (Foreign / US) |
+Foreign claims billed at **≥ 2× the US specialty average** for the same HCPCS code are flagged as INFLATED. Top charge ratios by country:
+
+| Country | Avg Charge Ratio (Submitted ÷ Allowed) |
 |---|---|
 | Mexico | ~5.8× |
 | India | ~5.2× |
@@ -128,22 +151,22 @@ WHERE a.rndrng_prvdr_cntry = 'US'
 
 | Finding | Implication |
 |---|---|
-| Overlap detection requires only a self-join | No ML needed — pure SQL is interpretable and auditable |
-| Charge inflation varies by country | Country-level benchmarks help prioritise investigations |
-| Specialty matters for benchmarking | A neurosurgeon and a GP billing the same HCPCS code have different US baselines |
-| Risk scoring enables triage | Investigators can sort by HIGH risk and work down — no manual filtering |
-| Schema mirrors real CMS PUF | Swap synthetic CSV for real data — zero code changes needed |
+| Date overlap is physically impossible | A single self-join produces high-precision fraud signals with no false positives by definition |
+| Charge ratio amplifies signal | Foreign claims inflated > 5× alongside date overlap is a near-certain phantom billing indicator |
+| Country-level aggregation enables triage | Investigators can prioritise by country, not NPI-by-NPI |
+| Risk score enables ranked investigation | Sort HIGH → MEDIUM → LOW; allocate OIG resources accordingly |
+| Schema mirrors real CMS PUF | Replace the synthetic CSV — zero query or dashboard changes needed |
 
 ---
 
 ## How to Reproduce
 
-### Setup
+### 1. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### Load data into SQLite
+### 2. Load data into SQLite
 ```bash
 sqlite3 data/claims.db
 .mode csv
@@ -151,30 +174,30 @@ sqlite3 data/claims.db
 .quit
 ```
 
-### Run a query
+### 3. Run a query
 ```bash
 sqlite3 data/claims.db < queries/02_overlap_detection.sql
 ```
 
-### Launch the dashboard
+### 4. Launch the dashboard
 ```bash
 streamlit run app.py
 ```
 
-### Use real CMS data
-1. Download the CMS PUF CSV from [data.cms.gov](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service)
+### 5. Use real CMS data (optional)
+1. Download the PUF CSV from [data.cms.gov](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service)
 2. Replace `data/claims.csv` with the real file
-3. Re-run the SQLite import — all queries and visualisations work unchanged
+3. Re-run the SQLite import — all 5 queries and the dashboard work unchanged
 
 ---
 
 ## What I'd Do Next
-- Add **date parsing** to the synthetic generator to enable true temporal overlap detection across multi-year CMS data
-- Layer in a **logistic regression or random forest** classifier trained on the SQL-derived risk features
-- Connect to **real CMS PUF data** and validate flagged NPIs against published OIG exclusion lists
-- Add a **geospatial tab** mapping flagged providers by country and US state
-- Export flagged NPIs as a **PDF investigation report** directly from the dashboard
+- Add **temporal date parsing** to the synthetic generator to enable multi-year rolling-window overlap detection on real CMS annual releases
+- Layer a **logistic regression or gradient boosting classifier** on top of the SQL-derived risk features (pairs, overlap days, charge ratio) for probability scoring
+- Validate flagged NPIs against the published **OIG exclusion list** and CMS preclusion list
+- Add a **geospatial choropleth** mapping suspicious $ at risk by US state and foreign country
+- Build a **PDF investigation report** export directly from the dashboard per flagged NPI
 
 ---
 
-*Fraud pattern documented in: CMS Office of Inspector General enforcement reports. Data structure: CMS Medicare Physician & Other Practitioners PUF.*
+*Fraud pattern documented in CMS Office of Inspector General enforcement actions. Data: CMS Medicare Physician & Other Practitioners by Provider and Service (PUF).*
