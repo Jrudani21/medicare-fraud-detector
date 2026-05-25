@@ -10,7 +10,7 @@ the actual dataset downloaded from:
   medicare-physician-other-practitioners-by-provider-and-service
 
 Fraud pattern modelled: cross-country phantom billing.
-A provider NPI appears in 2+ countries with overlapping claim date windows —
+A provider NPI appears in 2+ countries with overlapping claim date windows 
 physically impossible and a documented CMS OIG fraud scheme.
 """
 
