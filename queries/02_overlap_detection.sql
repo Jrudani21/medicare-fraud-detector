@@ -4,7 +4,7 @@
 --
 -- Fraud pattern (documented CMS OIG scheme):
 --   The same NPI appears billing from a US address AND a foreign
---   country address during the same date window — physically
+--   country address during the same date window  physically
 --   impossible, indicating phantom/fabricated foreign billing.
 --
 -- Date overlap: A.clm_from_dt <= B.clm_thru_dt
