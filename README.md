@@ -1,7 +1,7 @@
 # 🏥 Medicare Cross-Country Provider Fraud Detector
 
 > **Can SQL alone identify providers billing Medicare from two countries at the same time?**  
-> Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims — surfaced in a live Streamlit dashboard.
+> Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims surfaced in a live Streamlit dashboard.
 
 ---
 
@@ -18,12 +18,12 @@
 
 ## Problem
 
-Medicare fraud costs the US government an estimated **$60 billion per year**. One documented scheme — investigated by the CMS Office of Inspector General (OIG) — involves providers submitting claims from a US address and a foreign country during **overlapping date windows**. A provider cannot physically be in two countries at the same time, making this a strong indicator of phantom billing.
+Medicare fraud costs the US government an estimated **$60 billion per year**. One documented scheme   investigated by the CMS Office of Inspector General (OIG)   involves providers submitting claims from a US address and a foreign country during **overlapping date windows**. A provider cannot physically be in two countries at the same time, making this a strong indicator of phantom billing.
 
 This project detects that pattern end-to-end:
 
 1. Flag every NPI with overlapping US and foreign billing windows (SQL self-join)
-2. Score each flagged provider on severity — overlap pairs, overlap days, charge inflation, payment volume
+2. Score each flagged provider on severity   overlap pairs, overlap days, charge inflation, payment volume
 3. Benchmark foreign charges against the US average for the same HCPCS code and specialty
 4. Surface all findings in an interactive 5-tab Streamlit dashboard with Plotly charts
 
@@ -34,10 +34,10 @@ This project detects that pattern end-to-end:
 | Property | Detail |
 |---|---|
 | **Source** | [CMS Medicare Physician & Other Practitioners by Provider and Service (PUF)](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service) |
-| **Included dataset** | Synthetic — 9,976 claims · 2,000 NPIs (`data/claims.csv`) |
-| **Generator** | `data/generate.py` — real HCPCS codes, NPI format, CMS-benchmarked payment amounts |
+| **Included dataset** | Synthetic   9,976 claims · 2,000 NPIs (`data/claims.csv`) |
+| **Generator** | `data/generate.py`   real HCPCS codes, NPI format, CMS-benchmarked payment amounts |
 | **Storage** | SQLite (`data/claims.db`) |
-| **Drop-in compatible** | Schema mirrors exact CMS PUF column names — swap the real CSV and all queries run unchanged |
+| **Drop-in compatible** | Schema mirrors exact CMS PUF column names   swap the real CSV and all queries run unchanged |
 
 ### Schema (`queries/01_schema.sql`)
 
@@ -62,9 +62,9 @@ This project detects that pattern end-to-end:
 | File | What It Does |
 |---|---|
 | `01_schema.sql` | Create `cms_claims` table with CMS PUF column names and indexes on NPI, country, and dates |
-| `02_overlap_detection.sql` | Self-join on same NPI — one US claim, one foreign claim — with overlapping `clm_from_dt / clm_thru_dt` windows |
+| `02_overlap_detection.sql` | Self-join on same NPI   one US claim, one foreign claim   with overlapping `clm_from_dt / clm_thru_dt` windows |
 | `03_risk_scoring.sql` | Score every flagged NPI: +3 per pair · +1 per overlap day (cap 15) · +2 if charge ratio > 5× · +2 if payments > $10k · +3 if 3+ countries |
-| `04_country_pair_summary.sql` | Aggregate fraud signals by foreign country — flagged providers, overlap instances, charge inflation, $ at risk |
+| `04_country_pair_summary.sql` | Aggregate fraud signals by foreign country   flagged providers, overlap instances, charge inflation, $ at risk |
 | `05_specialty_benchmark.sql` | Compare foreign payments to the US average for the same HCPCS + specialty; flag anything ≥ 2× as INFLATED |
 
 **Core fraud detection logic** (`02_overlap_detection.sql`):
@@ -104,10 +104,10 @@ LOW    < 6   →  Flag for review
 
 | Tab | Content |
 |---|---|
-| 🌍 **Foreign Country Risk** | Side-by-side bar charts — flagged providers and avg charge inflation ratio by country |
-| 👤 **Flagged Providers** | Filterable NPI-level risk table — risk level, score, $ at risk, overlap days, foreign countries |
+| 🌍 **Foreign Country Risk** | Side-by-side bar charts   flagged providers and avg charge inflation ratio by country |
+| 👤 **Flagged Providers** | Filterable NPI-level risk table   risk level, score, $ at risk, overlap days, foreign countries |
 | 📋 **Claim Pairs** | Drill into overlapping US ↔ foreign claim pairs; Plotly timeline per NPI |
-| 📊 **Charge Benchmarks** | INFLATED claims table — foreign payment vs US specialty average for same HCPCS |
+| 📊 **Charge Benchmarks** | INFLATED claims table   foreign payment vs US specialty average for same HCPCS |
 | 📈 **Risk Distribution** | Pie chart by risk level · score histogram · suspicious $ at risk by specialty |
 
 Sidebar filters: **Risk Level** · **Specialty** · **Min Overlap Days**
@@ -155,7 +155,7 @@ Foreign claims billed at **≥ 2× the US specialty average** for the same HCPCS
 | Charge ratio amplifies signal | Foreign claims inflated > 5× alongside date overlap is a near-certain phantom billing indicator |
 | Country-level aggregation enables triage | Investigators can prioritise by country, not NPI-by-NPI |
 | Risk score enables ranked investigation | Sort HIGH → MEDIUM → LOW; allocate OIG resources accordingly |
-| Schema mirrors real CMS PUF | Replace the synthetic CSV — zero query or dashboard changes needed |
+| Schema mirrors real CMS PUF | Replace the synthetic CSV   zero query or dashboard changes needed |
 
 ---
 
@@ -187,7 +187,7 @@ streamlit run app.py
 ### 5. Use real CMS data (optional)
 1. Download the PUF CSV from [data.cms.gov](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service)
 2. Replace `data/claims.csv` with the real file
-3. Re-run the SQLite import — all 5 queries and the dashboard work unchanged
+3. Re-run the SQLite import   all 5 queries and the dashboard work unchanged
 
 ---
 
