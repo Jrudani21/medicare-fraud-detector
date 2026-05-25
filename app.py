@@ -73,7 +73,7 @@ total_at_risk   = risk_df["total_suspicious_payment"].sum()
 st.title("🏥 CMS Medicare Cross-Country Fraud Detector")
 st.caption(
     "Identifies providers (NPIs) billing from a US address and a foreign country "
-    "simultaneously — a documented CMS OIG phantom billing scheme. "
+    "simultaneously  a documented CMS OIG phantom billing scheme. "
     "Data structure: Medicare Physician & Other Practitioners by Provider and Service."
 )
 
@@ -147,7 +147,7 @@ with tab1:
 
 # ─── Tab 2: Provider risk table ───────────────────────────────────────────────
 with tab2:
-    st.subheader(f"Flagged Providers — {len(filtered_risk):,} NPIs")
+    st.subheader(f"Flagged Providers  {len(filtered_risk):,} NPIs")
 
     display = filtered_risk.copy()
     display["total_suspicious_payment"] = display["total_suspicious_payment"].apply(lambda x: f"${x:,.0f}")
@@ -191,7 +191,7 @@ with tab3:
             npi_claims, x_start="clm_from_dt", x_end="clm_thru_dt",
             y="label", color="rndrng_prvdr_cntry",
             hover_data=["hcpcs_cd","hcpcs_desc","avg_mdcr_pymt_amt"],
-            title=f"NPI {selected} — billing windows by country",
+            title=f"NPI {selected}  billing windows by country",
         )
         fig_tl.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
         st.plotly_chart(fig_tl, use_container_width=True)
