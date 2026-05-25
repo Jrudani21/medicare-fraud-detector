@@ -1,4 +1,4 @@
-🌍# Medicare Cross-Country Provider Fraud Detector
+# Medicare Cross-Country Provider Fraud Detector
 
 Detects providers (NPIs) submitting Medicare claims from a **US address and a foreign country simultaneously** — a documented phantom billing scheme investigated by the CMS Office of Inspector General (OIG).
 
