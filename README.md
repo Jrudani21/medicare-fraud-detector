@@ -1,4 +1,4 @@
-# 🏥 Medicare Cross-Country Provider Fraud Detector
+# [🏥 Medicare Cross-Country Provider Fraud Detector](https://medicare-fraud-detector.streamlit.app/)
 
 > **Can SQL alone identify providers billing Medicare from two countries at the same time?**  
 > Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims surfaced in a live Streamlit dashboard.
