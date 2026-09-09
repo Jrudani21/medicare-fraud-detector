@@ -141,17 +141,22 @@ for i in range(1700, 1900):
     cred    = random.choice(CREDENTIALS)
 
     # Legitimate-looking US claims
+    us_windows = []
     for _ in range(random.randint(2, 5)):
         start = rand_date()
         end   = start + timedelta(days=random.randint(1, 20))
+        us_windows.append((start, end))
         rows.append(make_claim(claim_id, npi, ptype, "US", us_state, start, end, last, first, cred))
         claim_id += 1
 
     # Overlapping foreign claims (same NPI, same window, different country)
-    base   = rand_date(date(2021,1,1), date(2023,6,1))
-    offset = random.randint(1, 10)
     for _ in range(random.randint(1, 3)):
-        fstart = base + timedelta(days=offset)
+        us_start, us_end = random.choice(us_windows)
+        # Start inside the US window -> overlap with it is guaranteed
+        # (was: independent random base -> ~91% of planted fraud NPIs never
+        # produced an overlapping pair and stayed undetected)
+        span = max((us_end - us_start).days, 1)
+        fstart = us_start + timedelta(days=random.randint(0, span))
         fend   = fstart + timedelta(days=random.randint(5, 25))
         # High submitted charges relative to payment = red flag
         row = make_claim(claim_id, npi, ptype, fcc, "", fstart, fend, last, first, cred)
