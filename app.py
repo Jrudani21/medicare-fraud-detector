@@ -12,7 +12,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
-import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="CMS Fraud Detector",
@@ -39,29 +38,17 @@ def get_conn():
     return sqlite3.connect("data/claims.db", check_same_thread=False)
 
 @st.cache_data
-def load_risk_scores():
-    return pd.read_sql_query(open("queries/03_risk_scoring.sql").read(), get_conn())
-
-@st.cache_data
-def load_overlapping_pairs():
-    return pd.read_sql_query(open("queries/02_overlap_detection.sql").read(), get_conn())
-
-@st.cache_data
-def load_country_summary():
-    return pd.read_sql_query(open("queries/04_country_pair_summary.sql").read(), get_conn())
-
-@st.cache_data
-def load_benchmarks():
-    return pd.read_sql_query(open("queries/05_specialty_benchmark.sql").read(), get_conn())
+def load_sql(filename):
+    return pd.read_sql_query(open(f"queries/{filename}").read(), get_conn())
 
 @st.cache_data
 def load_claims():
     return pd.read_csv("data/claims.csv", parse_dates=["clm_from_dt","clm_thru_dt"])
 
-risk_df    = load_risk_scores()
-pairs_df   = load_overlapping_pairs()
-country_df = load_country_summary()
-bench_df   = load_benchmarks()
+risk_df    = load_sql("03_risk_scoring.sql")
+pairs_df   = load_sql("02_overlap_detection.sql")
+country_df = load_sql("04_country_pair_summary.sql")
+bench_df   = load_sql("05_specialty_benchmark.sql")
 claims_df  = load_claims()
 
 total_providers = claims_df["rndrng_npi"].nunique()
