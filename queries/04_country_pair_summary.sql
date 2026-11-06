@@ -10,8 +10,7 @@ WITH overlapping_pairs AS (
         a.rndrng_npi,
         a.avg_mdcr_pymt_amt + b.avg_mdcr_pymt_amt                 AS pair_payment,
         ROUND(b.avg_sbmtd_chrg / NULLIF(b.avg_mdcr_alowd_amt,0),2) AS charge_ratio,
-        (MIN(a.clm_thru_dt, b.clm_thru_dt) -
-         MAX(a.clm_from_dt, b.clm_from_dt))                       AS overlap_days
+        CAST(julianday(MIN(a.clm_thru_dt, b.clm_thru_dt)) - julianday(MAX(a.clm_from_dt, b.clm_from_dt)) AS INTEGER)                       AS overlap_days
     FROM cms_claims a
     JOIN cms_claims b
         ON  a.rndrng_npi         = b.rndrng_npi

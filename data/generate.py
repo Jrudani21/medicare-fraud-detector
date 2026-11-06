@@ -192,6 +192,13 @@ with open("data/claims.csv", "w", newline="") as f:
     w.writeheader()
     w.writerows(rows)
 
+# Ground truth for evaluation: the planted cross-country fraud NPIs (no extra random draws).
+with open("data/labels.csv", "w", newline="") as f:
+    lw = csv.writer(f)
+    lw.writerow(["rndrng_npi", "planted_fraud"])
+    for i, n in enumerate(npi_pool):
+        lw.writerow([n, int(1700 <= i < 1900)])
+
 print(f"Generated {len(rows):,} claims")
 print(f"Unique NPIs: {len(set(r['rndrng_npi'] for r in rows)):,}")
 print(f"Foreign-country claims: {sum(1 for r in rows if r['rndrng_prvdr_cntry'] != 'US'):,}")

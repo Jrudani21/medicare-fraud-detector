@@ -1,7 +1,7 @@
 # TESTING - medicare-fraud-detector
 
 ## Overview
-The repository does not contain any automated test files, test scripts, or test configuration (e.g., no pytest, unittest, or test directories). There are no test commands defined in the README or elsewhere.
+`python tests/check.py` runs the SQL pipeline against `data/claims.db` and asserts that the database matches the CSV, that overlap days are real day counts, that the overlap rule flags exactly the planted providers, and that the peer-outlier screen keeps its precision. The older notes below predate it.
 
 ## Test Files
 - No files matching `test*.py`, `*_test.py`, or similar patterns were found.

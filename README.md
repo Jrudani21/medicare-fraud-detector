@@ -1,7 +1,7 @@
 # [🏥 Medicare Cross-Country Provider Fraud Detector](https://medicare-fraud-detector.streamlit.app/)
 
 > **Can SQL alone identify providers billing Medicare from two countries at the same time?**  
-> Overlap detection, risk scoring, and charge benchmarking across 9,976 synthetic CMS claims surfaced in a live Streamlit dashboard.
+> Overlap detection, risk scoring, and charge benchmarking across 9,936 synthetic CMS claims surfaced in a live Streamlit dashboard.
 
 ---
 
@@ -34,7 +34,7 @@ This project detects that pattern end-to-end:
 | Property | Detail |
 |---|---|
 | **Source** | [CMS Medicare Physician & Other Practitioners by Provider and Service (PUF)](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners/medicare-physician-other-practitioners-by-provider-and-service) |
-| **Included dataset** | Synthetic   9,976 claims · 2,000 NPIs (`data/claims.csv`) |
+| **Included dataset** | Synthetic   9,936 claims · 2,000 NPIs (`data/claims.csv`) |
 | **Generator** | `data/generate.py`   real HCPCS codes, NPI format, CMS-benchmarked payment amounts |
 | **Storage** | SQLite (`data/claims.db`) |
 | **Drop-in compatible** | Schema mirrors exact CMS PUF column names   swap the real CSV and all queries run unchanged |
@@ -66,6 +66,7 @@ This project detects that pattern end-to-end:
 | `03_risk_scoring.sql` | Score every flagged NPI: +3 per pair · +1 per overlap day (cap 15) · +2 if charge ratio > 5× · +2 if payments > $10k · +3 if 3+ countries |
 | `04_country_pair_summary.sql` | Aggregate fraud signals by foreign country   flagged providers, overlap instances, charge inflation, $ at risk |
 | `05_specialty_benchmark.sql` | Compare foreign payments to the US average for the same HCPCS + specialty; flag anything ≥ 2× as INFLATED |
+| `06_peer_outliers.sql` | Rule-free screen: z-score of each provider's average charge ratio against peers in the same specialty |
 
 **Core fraud detection logic** (`02_overlap_detection.sql`):
 
@@ -121,11 +122,11 @@ Sidebar filters: **Risk Level** · **Specialty** · **Min Overlap Days**
 | Metric | Result |
 |---|---|
 | Providers analysed | 2,000 NPIs |
-| **Flagged as suspicious** | **18 NPIs (0.9%)** |
-| HIGH risk (OIG referral level) | 7 NPIs |
-| **Total Medicare $ at risk** | **$46,000+** |
+| **Flagged as suspicious** | **200 NPIs (10%)**, every one a planted fraud provider |
+| HIGH risk (OIG referral level) | 136 NPIs (MEDIUM 42, LOW 22) |
+| **Total Medicare $ at risk** | **$854,792** across flagged providers |
 | Highest charge inflation | 5–6× the Medicare allowed amount |
-| Most inflated foreign countries | Mexico · India · Philippines |
+| Most inflated foreign countries | India · Nigeria · Ghana |
 
 ### Risk Score Breakdown
 
@@ -137,13 +138,13 @@ Sidebar filters: **Risk Level** · **Specialty** · **Min Overlap Days**
 
 ### Charge Benchmarking
 
-Foreign claims billed at **≥ 2× the US specialty average** for the same HCPCS code are flagged as INFLATED. Top charge ratios by country:
+Foreign claims billed at **≥ 2× the US specialty average** for the same HCPCS code are flagged as INFLATED. Top charge ratios by country (query 04):
 
 | Country | Avg Charge Ratio (Submitted ÷ Allowed) |
 |---|---|
-| Mexico | ~5.8× |
-| India | ~5.2× |
-| Philippines | ~4.9× |
+| India | 5.55× |
+| Nigeria | 5.54× |
+| Ghana | 5.44× |
 
 ---
 
@@ -174,9 +175,19 @@ sqlite3 data/claims.db
 .quit
 ```
 
+Or rebuild the database from the CSV in one step (keeps `claims.db` and `claims.csv` in sync):
+```bash
+python data/build_db.py
+```
+
 ### 3. Run a query
 ```bash
 sqlite3 data/claims.db < queries/02_overlap_detection.sql
+```
+
+### 3b. Run the checks
+```bash
+python tests/check.py
 ```
 
 ### 4. Launch the dashboard
@@ -191,9 +202,37 @@ streamlit run app.py
 
 ---
 
+## Evaluation and corrections
+
+The data generator also writes `data/labels.csv` (the planted fraud NPIs), so detection can be scored.
+`tests/check.py` prints these numbers and asserts the invariants behind them.
+
+| Detector | Flagged | Precision | Recall |
+|---|---|---|---|
+| Overlap rule (queries 02/03) | 200 | 1.00 | 1.00 |
+| Peer-outlier screen, z ≥ 1.0 | 201 | 0.83 | 0.83 |
+| Peer-outlier screen, z ≥ 2.0 | 107 | 0.99 | 0.53 |
+| Peer-outlier screen, z ≥ 3.0 | 49 | 1.00 | 0.24 |
+
+**Read this with care.** The overlap rule scores perfectly because the generator plants exactly that pattern, so
+it is a test of the plumbing, not of real-world accuracy. The peer-outlier screen never looks at country or dates,
+so its 0.83 / 0.83 at z ≥ 1 is the more honest signal that the charge-ratio feature carries information.
+
+Corrections made when this was re-run:
+- `overlap_days` was always 0. SQLite subtracted two ISO date strings as numbers, which compares only the year. It now uses `julianday()`, so the "+1 per overlap day" score term works.
+- `claims.db` was older than `claims.csv` (9,976 claims against 9,936) and the dashboard reads the database. It is rebuilt with `data/build_db.py`.
+- The headline numbers above (previously 18 flagged, 7 HIGH, $46,000+) came from that stale database and the broken overlap term, and are replaced.
+
+## How the field approaches this
+
+- **Outlier-first screening.** Program-integrity units describe a first pass that finds providers who are statistical outliers among their peers, then investigators gather evidence ([Texas HHSC OIG](https://oig.hhs.texas.gov/about-us/news/data-analytics-strengthens-oig-process)). Query 06 is a small version of that.
+- **Impossible days.** Services adding up to more than 24 hours on one date of service are a standard red flag; this data has no units or times, so it is not testable here.
+- **Supervised models need labels.** Published Part B work labels providers from the OIG exclusion list (LEIE) and handles extreme class imbalance by undersampling; Random Forest reached an AUC of 0.873 at a 90:10 class mix ([Part B study on PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC6120851)). Excluded providers tend to be prosecuted for overt fraud, so those labels can miss subtler schemes.
+- **Predictive analytics at CMS.** The Fraud Prevention System's savings were disputed: CMS reported a 5:1 return, while OIG's adjusted figure was $1.34 per dollar ([OIG, 2017](https://www.oversight.gov/sites/default/files/oig-reports/11500509.pdf)). Whatever the model, track outcomes.
+
 ## What I'd Do Next
 - Add **temporal date parsing** to the synthetic generator to enable multi-year rolling-window overlap detection on real CMS annual releases
-- Layer a **logistic regression or gradient boosting classifier** on top of the SQL-derived risk features (pairs, overlap days, charge ratio) for probability scoring
+- Layer a **logistic regression or gradient boosting classifier** on top of the SQL-derived risk features (pairs, overlap days, charge ratio, peer z-score) and judge it by precision at the top 20 referrals; real labels would come from LEIE
 - Validate flagged NPIs against the published **OIG exclusion list** and CMS preclusion list
 - Add a **geospatial choropleth** mapping suspicious $ at risk by US state and foreign country
 - Build a **PDF investigation report** export directly from the dashboard per flagged NPI

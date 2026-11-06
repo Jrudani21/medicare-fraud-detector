@@ -37,10 +37,7 @@ SELECT
     b.avg_sbmtd_chrg                                     AS foreign_submitted_charge,
 
     -- Overlap window in days
-    (
-        MIN(a.clm_thru_dt, b.clm_thru_dt) -
-        MAX(a.clm_from_dt, b.clm_from_dt)
-    )                                                    AS overlap_days,
+    CAST(julianday(MIN(a.clm_thru_dt, b.clm_thru_dt)) - julianday(MAX(a.clm_from_dt, b.clm_from_dt)) AS INTEGER)                                                    AS overlap_days,
 
     -- Charge inflation: submitted vs allowed (red flag if >> 3x)
     ROUND(b.avg_sbmtd_chrg / NULLIF(b.avg_mdcr_alowd_amt, 0), 2) AS foreign_charge_ratio
