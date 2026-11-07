@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Janak Rudani. All rights reserved.
+# Provenance: Jrudani21/medicare-fraud-detector/tests/check.py 2ae43708b8bc36a0
 """Runnable checks for the SQL pipeline. Run from the repo root:  python tests/check.py
 
 Prints the detection numbers the README quotes and asserts the invariants behind them.

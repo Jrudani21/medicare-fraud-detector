@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/03_risk_scoring.sql 91b681fe05a3f320
 -- ============================================================
 -- Query 3: Risk-score every flagged provider NPI
 --

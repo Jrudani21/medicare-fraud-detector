@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/05_specialty_benchmark.sql 6d5421e4266b8d9f
 -- ============================================================
 -- Query 5: Benchmark foreign-billed payments vs US peers
 --          by provider specialty and HCPCS code.

@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/06_peer_outliers.sql d1743926497cdf3b
 -- ============================================================
 -- Query 6: Peer-outlier screen (no country or date rule needed)
 --

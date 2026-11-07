@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/01_schema.sql 7d249baf1a1d9dcc
 -- ============================================================
 -- CMS Medicare Part B Claims  Cross-Country Fraud Detection
 --

@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/04_country_pair_summary.sql dc145f315bbba338
 -- ============================================================
 -- Query 4: Which foreign countries appear most in fraud pairs?
 --          Useful for OIG investigator prioritisation.

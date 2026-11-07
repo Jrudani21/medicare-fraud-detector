@@ -1,3 +1,5 @@
+-- Copyright (c) 2026 Janak Rudani. All rights reserved.
+-- Provenance: Jrudani21/medicare-fraud-detector/queries/02_overlap_detection.sql 7a8f0f0de105e91c
 -- ============================================================
 -- Query 2: Detect providers billing from 2+ countries
 --          with overlapping claim date windows

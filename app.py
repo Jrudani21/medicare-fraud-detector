@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Janak Rudani. All rights reserved.
+# Provenance: Jrudani21/medicare-fraud-detector/app.py 5b6bbae731b5e56a
 """
 CMS Medicare Cross-Country Provider Fraud Dashboard
 
